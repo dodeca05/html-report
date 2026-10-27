@@ -11,8 +11,9 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.config import Settings
 from app.middleware import BodySizeLimitMiddleware
-from app.routers import documents, upload
+from app.routers import documents, settings_page, upload
 from app.services.file_service import ReportStorage
+from app.services.token_service import TokenStore
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +32,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     configure_logging(settings.log_level)
     storage = ReportStorage(settings.reports_dir, settings.max_upload_bytes, settings.timezone)
+    tokens = TokenStore(settings.config_dir, settings.timezone)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         storage.ensure_directory()
+        tokens.ensure_directory()
         removed = storage.remove_stale_temp_files()
         if removed:
             logger.info("Removed %d stale temp file(s) from interrupted uploads", removed)
-        _log_startup(settings, storage)
+        _log_startup(settings, storage, tokens)
         yield
 
     app = FastAPI(
@@ -53,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.storage = storage
+    app.state.tokens = tokens
     app.add_middleware(
         BodySizeLimitMiddleware,
         max_body_size=settings.max_upload_bytes + MULTIPART_OVERHEAD_BYTES,
@@ -60,18 +64,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(upload.router)
     app.include_router(documents.router)
+    app.include_router(settings_page.router)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
 
 
-def _log_startup(settings: Settings, storage: ReportStorage) -> None:
+def _log_startup(settings: Settings, storage: ReportStorage, tokens: TokenStore) -> None:
     logger.info("Reports directory: %s", settings.reports_dir)
     if not storage.is_writable():
         logger.error("Reports directory %s is not writable; uploads will fail", settings.reports_dir)
+    logger.info("Config directory: %s", settings.config_dir)
+    if not tokens.is_writable():
+        logger.error("Config directory %s is not writable; token changes will fail", settings.config_dir)
     if settings.upload_api_key is None:
-        logger.warning("UPLOAD_API_KEY is not set: the upload API (POST /api/docs) is disabled")
+        logger.warning("UPLOAD_API_KEY (admin key) is not set: the settings page is disabled")
     elif settings.upload_api_key == "change-me":
         logger.warning("UPLOAD_API_KEY is still the example value 'change-me'; set a secret key")
+    if tokens.auth_enabled():
+        logger.info("Token authentication is ON (%d token(s) in %s)", len(tokens.list_tokens()), tokens.tokens_path)
+    else:
+        logger.warning("Token authentication is OFF: anyone can upload, replace and delete reports")
     if settings.public_base_url:
         logger.info("Report URLs use PUBLIC_BASE_URL=%s", settings.public_base_url)
     else:

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from fastapi.security import APIKeyHeader
 
 from app.config import Settings
-from app.dependencies import get_settings, get_storage
+from app.dependencies import get_settings, get_storage, get_tokens
 from app.schemas import ErrorResponse, ReportItem, ReportListResponse, UploadResponse
 from app.services.file_service import (
     InvalidReportContentError,
@@ -27,6 +27,7 @@ from app.services.file_service import (
     check_html_filename,
     resolve_upload_name,
 )
+from app.services.token_service import TokenStore
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ router = APIRouter(prefix="/api")
 _api_key_header = APIKeyHeader(
     name="X-API-Key",
     auto_error=False,
-    description="UPLOAD_API_KEY 환경변수에 설정한 업로드 키",
+    description="설정 페이지에서 만든 토큰 또는 관리자 키(UPLOAD_API_KEY)",
 )
 
 _STATUS_BY_ERROR: dict[type[ReportError], int] = {
@@ -53,8 +54,8 @@ def _error(description: str) -> dict[str, Any]:
 
 
 _AUTH_RESPONSES: dict[int | str, dict[str, Any]] = {
-    status.HTTP_401_UNAUTHORIZED: _error("API 키 누락 또는 불일치"),
-    status.HTTP_503_SERVICE_UNAVAILABLE: _error("UPLOAD_API_KEY 미설정으로 API 비활성화"),
+    status.HTTP_401_UNAUTHORIZED: _error("API 키 누락, 불일치 또는 만료"),
+    status.HTTP_503_SERVICE_UNAVAILABLE: _error("관리자 키와 토큰이 하나도 없어 API 비활성화"),
 }
 _CONTENT_RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_400_BAD_REQUEST: _error("잘못된 파일 이름 또는 내용 (빈 파일, UTF-8 아님)"),
@@ -69,26 +70,38 @@ _HOST_HEADER_RE = re.compile(r"(?P<host>\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::\d
 def require_api_key(
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
+    tokens: Annotated[TokenStore, Depends(get_tokens)],
     api_key: Annotated[str | None, Security(_api_key_header)],
 ) -> None:
-    if settings.upload_api_key is None:
+    """Accept the admin key (UPLOAD_API_KEY) or an unexpired token, unless token auth is switched off."""
+    if not tokens.auth_enabled():
+        return
+    admin_key = settings.upload_api_key
+    if admin_key is None and not tokens.has_tokens():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Upload API is disabled. Set UPLOAD_API_KEY on the server to enable it.",
+            detail="Upload API is disabled: no API token is configured. "
+            "Set UPLOAD_API_KEY or create a token on the settings page.",
         )
-    if api_key is None or not secrets.compare_digest(api_key.encode(), settings.upload_api_key.encode()):
-        logger.warning(
-            "Rejected %s %s from %s: %s API key",
-            request.method,
-            request.url.path,
-            _client_host(request),
-            "missing" if api_key is None else "invalid",
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key.",
-            headers={"WWW-Authenticate": "APIKey"},
-        )
+
+    if api_key is None:
+        reason = "missing"
+    elif admin_key is not None and secrets.compare_digest(api_key.encode(), admin_key.encode()):
+        return
+    else:
+        token = tokens.lookup(api_key)
+        if token is not None and not token.is_expired(tokens.now()):
+            return
+        reason = "invalid" if token is None else f"expired ({token.name})"
+
+    logger.warning(
+        "Rejected %s %s from %s: %s API key", request.method, request.url.path, _client_host(request), reason
+    )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="API key has expired." if reason.startswith("expired") else "Invalid or missing API key.",
+        headers={"WWW-Authenticate": "APIKey"},
+    )
 
 
 @router.get(

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}설정 · HTML Reports{% endblock %}
+
+{% block content %}
+    <p class="back-link"><a href="{{ root_path }}/index">← 보고서 목록</a></p>
+    <header class="page-header">
+      <h1>설정</h1>
+      <form method="post" action="{{ root_path }}/settings/logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-ghost">로그아웃</button>
+      </form>
+    </header>
+
+    {% if flash %}<p class="alert alert-{{ flash[0] }}" role="status">{{ flash[1] }}</p>{% endif %}
+
+    {% if new_token %}
+    <section class="card card-padded card-highlight" aria-labelledby="new-token-title">
+      <h2 id="new-token-title">새 토큰을 만들었습니다</h2>
+      <p class="muted">이름 <strong>{{ new_token.name }}</strong> · 만료 {{ new_token.expires_at }}</p>
+      <pre class="token-value"><code>{{ new_token.token }}</code></pre>
+      <p class="muted">업로드할 때 <code>X-API-Key</code> 헤더에 이 값을 넣으세요. 토큰 목록에서 다시 볼 수 있습니다.</p>
+    </section>
+    {% endif %}
+
+    <section class="card card-padded" aria-labelledby="auth-title">
+      <div class="card-head">
+        <h2 id="auth-title">토큰 인증</h2>
+        {% if auth_enabled %}<span class="pill pill-on">켜짐</span>{% else %}<span class="pill pill-off">꺼짐</span>{% endif %}
+      </div>
+      {% if auth_enabled %}
+      <p class="muted">업로드 · 교체 · 삭제 API를 호출하려면 <code>X-API-Key</code> 헤더에 유효한 토큰이나 관리자 키가 있어야 합니다.</p>
+      {% else %}
+      <p class="alert alert-warn">토큰 인증이 꺼져 있습니다. 같은 네트워크의 누구나 토큰 없이 보고서를 업로드 · 교체 · 삭제할 수 있습니다.</p>
+      {% endif %}
+      <form method="post" action="{{ root_path }}/settings/token-auth">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if auth_enabled %}
+        <input type="hidden" name="enabled" value="off">
+        <button type="submit" class="btn btn-danger-outline">토큰 인증 끄기</button>
+        {% else %}
+        <input type="hidden" name="enabled" value="on">
+        <button type="submit" class="btn btn-primary">토큰 인증 켜기</button>
+        {% endif %}
+      </form>
+    </section>
+
+    <section class="card card-padded" aria-labelledby="create-title">
+      <h2 id="create-title">토큰 추가</h2>
+      <p class="muted">토큰 값은 서버가 무작위로 만듭니다.</p>
+      <form method="post" action="{{ root_path }}/settings/tokens" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="field">
+          <span class="field-label">토큰 이름</span>
+          <input type="text" name="name" value="{{ form.name }}" maxlength="50" required autocomplete="off" placeholder="예: claude-code-노트북">
+        </label>
+        <fieldset class="field">
+          <legend class="field-label">만료 기간</legend>
+          <div class="choices">
+            {% for value, label in expiry_choices.items() %}
+            <label class="choice">
+              <input type="radio" name="expiry" value="{{ value }}"{% if form.expiry == value %} checked{% endif %}>
+              <span>{{ label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <div><button type="submit" class="btn btn-primary">토큰 생성</button></div>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="list-title">
+      <div class="card-head card-head-padded">
+        <h2 id="list-title">토큰 목록</h2>
+        <span class="muted">{{ tokens|length }}개</span>
+      </div>
+      {% if tokens %}
+      <table class="tokens">
+        <thead>
+          <tr>
+            <th scope="col">이름</th>
+            <th scope="col">토큰</th>
+            <th scope="col">만료일</th>
+            <th scope="col">상태</th>
+            <th scope="col"><span class="sr-only">삭제</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for token in tokens %}
+          <tr>
+            <td class="t-name">{{ token.name }}</td>
+            <td class="t-token">
+              <details>
+                <summary><code>{{ token.masked }}</code></summary>
+                <code class="token-full">{{ token.token }}</code>
+              </details>
+            </td>
+            <td class="t-date">{{ token.expires_at }}</td>
+            <td class="t-status">{% if token.expired %}<span class="pill pill-off">만료됨</span>{% else %}<span class="pill pill-on">유효</span>{% endif %}</td>
+            <td class="t-actions">
+              <details class="confirm">
+                <summary class="btn btn-small btn-ghost">삭제</summary>
+                <form method="post" action="{{ root_path }}/settings/tokens/delete">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="name" value="{{ token.name }}">
+                  <button type="submit" class="btn btn-small btn-danger">정말 삭제</button>
+                </form>
+              </details>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">등록된 토큰이 없습니다</p>
+      {% endif %}
+      <p class="card-note">관리자 키(<code>.env</code>의 <code>UPLOAD_API_KEY</code>)는 목록에 없지만 항상 사용할 수 있습니다. 토큰은 서버의 <code>{{ tokens_path }}</code> 파일에 저장됩니다.</p>
+    </section>
+{% endblock %}

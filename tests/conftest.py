@@ -26,10 +26,16 @@ def reports_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def make_settings(reports_dir: Path) -> Callable[..., Settings]:
+def config_dir(tmp_path: Path) -> Path:
+    return tmp_path / "config"
+
+
+@pytest.fixture
+def make_settings(reports_dir: Path, config_dir: Path) -> Callable[..., Settings]:
     def _make(**overrides: object) -> Settings:
         values: dict[str, object] = {
             "reports_dir": reports_dir,
+            "config_dir": config_dir,
             "upload_api_key": API_KEY,
             "public_base_url": BASE_URL,
         }

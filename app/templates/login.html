@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}설정 · HTML Reports{% endblock %}
+{% block page_class %} page-narrow{% endblock %}
+
+{% block content %}
+    <p class="back-link"><a href="{{ root_path }}/index">← 보고서 목록</a></p>
+    <section class="card card-padded">
+      <h1 class="card-title">설정</h1>
+      {% if disabled %}
+      <p class="alert alert-warn">설정 페이지를 쓰려면 서버의 <code>.env</code> 파일에 관리자 키(<code>UPLOAD_API_KEY</code>)를 설정하고 서버를 다시 시작하세요.</p>
+      {% elif forbidden %}
+      <p class="alert alert-error">요청을 확인할 수 없습니다. 설정 페이지를 새로고침한 뒤 다시 시도하세요.</p>
+      <p><a class="btn btn-primary" href="{{ root_path }}/settings">설정 페이지로</a></p>
+      {% else %}
+      {% if flash %}<p class="alert alert-{{ flash[0] }}" role="status">{{ flash[1] }}</p>{% endif %}
+      <p class="muted">관리자 키로 로그인하세요. 서버 <code>.env</code> 파일의 <code>UPLOAD_API_KEY</code> 값입니다.</p>
+      <form method="post" action="{{ root_path }}/settings/login" class="stack">
+        <label class="field">
+          <span class="field-label">관리자 키</span>
+          <input type="password" name="key" required autocomplete="current-password" autofocus>
+        </label>
+        <div><button type="submit" class="btn btn-primary">로그인</button></div>
+      </form>
+      {% endif %}
+    </section>
+{% endblock %}

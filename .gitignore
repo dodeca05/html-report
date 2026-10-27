@@ -12,6 +12,10 @@ venv/
 data/reports/*
 !data/reports/.gitkeep
 
+# Settings page state (tokens.csv holds API tokens)
+data/config/*
+!data/config/.gitkeep
+
 # Editors / OS
 .idea/
 .vscode/

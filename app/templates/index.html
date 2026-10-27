@@ -1,18 +1,12 @@
-<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <title>HTML Reports</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5bd3'/%3E%3Cpath d='M10 8h8l5 5v11H10z' fill='%23fff'/%3E%3Cpath d='M13 17h7M13 20.5h7' stroke='%232f5bd3' stroke-width='1.6'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="static/style.css">
-</head>
-<body>
-  <main class="page">
+{% extends "base.html" %}
+
+{% block content %}
     <header class="page-header">
       <h1>HTML Reports</h1>
-      {% if reports %}<p class="count">보고서 {{ reports|length }}개</p>{% endif %}
+      <div class="header-actions">
+        {% if reports %}<p class="count">보고서 {{ reports|length }}개</p>{% endif %}
+        <a class="header-link" href="{{ root_path }}/settings">설정</a>
+      </div>
     </header>
 
     <section class="card">
@@ -37,6 +31,4 @@
       <p class="empty">업로드된 보고서가 없습니다</p>
       {% endif %}
     </section>
-  </main>
-</body>
-</html>
+{% endblock %}

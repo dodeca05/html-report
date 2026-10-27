@@ -52,7 +52,7 @@ def report_index(request: Request, storage: Annotated[ReportStorage, Depends(get
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"reports": reports},
+        {"reports": reports, "root_path": request.scope.get("root_path", "")},
         headers={"Content-Security-Policy": INDEX_CSP, "X-Content-Type-Options": "nosniff"},
     )
 

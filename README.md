@@ -7,6 +7,7 @@ Claude Code, OpenAI Codex 같은 AI 코딩 에이전트가 만든 HTML 보고서
 - 업로드된 HTML은 CSP sandbox로 격리됩니다. 스크립트는 실행되지만 서비스의 다른 페이지, 쿠키, 저장소에는 접근할 수 없습니다.
 - 올린 보고서는 같은 주소를 유지한 채 교체(`PUT`)하거나 삭제(`DELETE`)할 수 있습니다.
 - 보고서 목록은 사람용 페이지(`/index`)와 프로그램용 JSON API(`GET /api/docs`)로 모두 조회할 수 있습니다.
+- 설정 페이지(`/settings`)에서 토큰 인증을 켜고 끄고, 만료일이 있는 무작위 업로드 토큰을 만들거나 삭제합니다. 토큰은 CSV 파일에 저장됩니다.
 
 ```text
 에이전트 ──POST /api/docs──▶ 서버 ──▶ ./data/reports/report.html
@@ -28,7 +29,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# .env 의 UPLOAD_API_KEY 를 반드시 바꾸세요. 예: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# .env 의 UPLOAD_API_KEY(관리자 키)를 반드시 바꾸세요. 예: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
@@ -45,14 +46,15 @@ docker build -t html-report-server .
 docker run -d \
   --name html-report-server \
   -p 8000:8000 \
-  -v ./data/reports:/app/data/reports \
+  -v ./data:/app/data \
   --env-file .env \
   html-report-server
 ```
 
-- 컨테이너 포트는 8000이고, 보고서 디렉터리 `/app/data/reports` 를 볼륨으로 영속화합니다. 컨테이너를 지우고 다시 만들어도 보고서는 유지됩니다.
+- 컨테이너 포트는 8000이고, `data` 디렉터리 전체(보고서 `data/reports`, 설정·토큰 `data/config`)를 볼륨으로 영속화합니다. 컨테이너를 지우고 다시 만들어도 보고서와 토큰은 유지됩니다.
+- 예전 명령(`-v ./data/reports:/app/data/reports`)으로 실행하면 보고서는 유지되지만 토큰과 설정은 컨테이너를 다시 만들 때 사라집니다.
 - 컨테이너는 UID 1000의 비루트 사용자로 실행됩니다. 호스트 사용자의 UID가 다르면 바인드 마운트한 디렉터리에 쓰지 못하므로 `docker build --build-arg APP_UID=$(id -u) -t html-report-server .` 로 빌드하세요.
-- Docker 23 이전 버전은 상대 경로 바인드 마운트를 지원하지 않습니다. 이 경우 `-v "$(pwd)/data/reports:/app/data/reports"` 를 사용하세요.
+- Docker 23 이전 버전은 상대 경로 바인드 마운트를 지원하지 않습니다. 이 경우 `-v "$(pwd)/data:/app/data"` 를 사용하세요.
 - 이미지에 `HEALTHCHECK` 가 포함되어 있어 `docker ps` 에서 상태(healthy)를 확인할 수 있습니다.
 
 ## 환경변수
@@ -64,12 +66,54 @@ docker run -d \
 | `PUBLIC_BASE_URL` | (없음) | 응답 `url` 을 만들 때 쓰는 외부 공개 주소. 예: `https://example.com`. 운영 환경에서는 반드시 설정 |
 | `REPORTS_DIR` | `./data/reports` | 보고서 저장 디렉터리. 없으면 시작 시 자동 생성 |
 | `MAX_UPLOAD_SIZE_MB` | `10` | 최대 업로드 크기(MB, 소수 가능) |
-| `UPLOAD_API_KEY` | (없음) | 업로드 API 키. **설정하지 않으면 업로드 API가 비활성화(503)** 됩니다 |
+| `UPLOAD_API_KEY` | (없음) | 관리자 키. 설정 페이지 로그인에 쓰이고, 업로드·교체·삭제 API에도 항상 쓸 수 있습니다. **설정하지 않으면 설정 페이지가 비활성화(503)** 됩니다 |
+| `CONFIG_DIR` | `./data/config` | 설정 페이지 데이터(`tokens.csv`, `settings.json`) 저장 디렉터리. 없으면 시작 시 자동 생성 |
 | `TZ` | `Asia/Seoul` | 목록 페이지와 `uploaded_at` 의 시간대 |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1,::1` | (선택) `PUBLIC_BASE_URL` 이 없을 때 응답 URL에 그대로 써도 되는 Host 이름 목록. `*` 는 모두 허용 |
 | `LOG_LEVEL` | `INFO` | (선택) `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
 `.env` 파일은 Docker `--env-file` 과 같은 `KEY=VALUE` 형식입니다. 줄 끝 주석은 지원하지 않습니다.
+
+## 설정 페이지와 토큰 — `/settings`
+
+브라우저에서 `http://localhost:8000/settings` 를 엽니다(목록 페이지 오른쪽 위의 "설정" 링크). `.env` 의 관리자 키(`UPLOAD_API_KEY`)로 로그인합니다.
+
+| 기능 | 설명 |
+|---|---|
+| 토큰 인증 켜기/끄기 | **켜짐(기본)**: 업로드·교체·삭제에 `X-API-Key` 헤더로 유효한 토큰이나 관리자 키가 필요합니다. **꺼짐**: 누구나 토큰 없이 업로드·교체·삭제할 수 있습니다. 조회와 목록은 항상 공개입니다. |
+| 토큰 추가 | 이름과 만료 기간(7일, 30일, 1년, 영구 = 999년)을 고르면 서버가 `hrs_` 로 시작하는 무작위 토큰을 만듭니다. 토큰 값은 직접 정할 수 없습니다. |
+| 토큰 목록 | 이름, 토큰(가려서 표시, "보기"로 펼침), 만료일, 상태(유효/만료됨)를 보여줍니다. |
+| 토큰 삭제 | "삭제" → "정말 삭제"를 누르면 바로 그 토큰으로 요청할 수 없게 됩니다. |
+
+만든 토큰은 관리자 키와 같은 방식으로 씁니다.
+
+```bash
+curl -X POST http://localhost:8000/api/docs \
+  -H "X-API-Key: hrs_발급받은_토큰" \
+  -F "file=@report.html"
+```
+
+만료된 토큰으로 요청하면 `401` 과 `{"detail": "API key has expired."}` 가 반환됩니다.
+
+**저장 파일** (`CONFIG_DIR`, 기본 `./data/config`)
+
+```csv
+name,token,expires_at
+claude-code 노트북,hrs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx,2026-11-04T00:30:33+09:00
+영구 토큰,hrs_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy,3025-10-28T00:30:33+09:00
+```
+
+- `tokens.csv`: 열은 `name`(토큰 이름), `token`(토큰 값), `expires_at`(만료일, ISO 8601)입니다. 스프레드시트에서 한글이 깨지지 않도록 UTF-8(BOM)으로 저장하고, 파일 권한은 소유자만 읽고 쓰기(600)입니다.
+- `settings.json`: `{"token_auth_enabled": true}` 처럼 토큰 인증 켜짐/꺼짐을 저장합니다. 파일이 없거나 읽을 수 없으면 켜짐으로 동작합니다.
+- 두 파일은 요청마다 다시 읽으므로 직접 편집해도 바로 반영됩니다. 손으로 쓸 때 만료일은 `2026-12-31` 처럼 날짜만 적어도 됩니다(`TZ` 기준 0시). 형식이 잘못된 줄은 무시하고 로그에 경고를 남깁니다.
+- 토큰 이름은 1~50자이고 중복될 수 없습니다. 제어 문자와, 스프레드시트에서 수식으로 해석되는 `=` `+` `-` `@` 로 시작하는 이름은 쓸 수 없습니다.
+
+**로그인과 보안**
+
+- 로그인 세션은 12시간 유지되는 HttpOnly·SameSite=Strict 쿠키이며 `/settings` 경로에만 전송됩니다. 쿠키는 관리자 키로 서명하므로, 관리자 키를 바꾸면 모든 세션이 끝납니다.
+- 설정을 바꾸는 모든 요청은 CSRF 토큰과 Origin 헤더를 확인합니다. 다른 사이트나 sandbox에서 실행되는 보고서(Origin: `null`)는 설정을 바꿀 수 없습니다.
+- 설정 페이지는 스크립트를 쓰지 않고, 다른 페이지에 iframe으로 넣을 수 없으며(클릭재킹 방지), 브라우저에 캐시되지 않습니다(`Cache-Control: no-store`).
+- 관리자 키를 설정하지 않으면 설정 페이지는 비활성화(503)됩니다. 이 경우에도 `tokens.csv` 에 있는 토큰으로는 업로드할 수 있습니다.
 
 ## API 사용 예제
 
@@ -114,6 +158,7 @@ curl -X POST http://localhost:8000/api/docs \
 - 한글과 공백을 쓸 수 있습니다: `name=주간 보고서` → `주간 보고서.html`, URL은 `/docs/%EC%A3%BC%EA%B0%84%20%EB%B3%B4%EA%B3%A0%EC%84%9C`
 - 같은 이름의 보고서가 이미 있으면 `409 Conflict` 를 반환하고 기존 파일은 그대로 둡니다. 내용을 바꾸려면 아래의 `PUT` 을 사용하세요.
 - 내용은 UTF-8 인코딩이어야 합니다. 보고서는 `text/html; charset=utf-8` 로 제공됩니다.
+- `X-API-Key` 에는 설정 페이지에서 만든 토큰이나 관리자 키를 넣습니다. 토큰 인증이 꺼져 있으면 생략할 수 있습니다.
 
 상태 코드 (오류 응답 형식: `{"detail": "..."}`):
 
@@ -124,13 +169,13 @@ curl -X POST http://localhost:8000/api/docs \
 | `200` | 교체 성공 (`PUT`) |
 | `204` | 삭제 성공 (`DELETE`, 본문 없음) |
 | `400` | 허용되지 않는 이름(`/`, `\`, `..` 등), 빈 파일, UTF-8이 아닌 파일 |
-| `401` | `X-API-Key` 누락 또는 불일치 |
+| `401` | `X-API-Key` 누락·불일치, 또는 만료된 토큰 (`API key has expired.`) |
 | `404` | 교체·삭제할 보고서가 없음 (`PUT`, `DELETE`) |
 | `409` | 같은 이름의 보고서가 이미 존재 (`POST`) |
 | `413` | `MAX_UPLOAD_SIZE_MB` 초과 |
 | `415` | `.html` 이 아닌 파일 |
 | `422` | `file` 필드 누락 |
-| `503` | 서버에 `UPLOAD_API_KEY` 가 설정되지 않아 업로드·교체·삭제 API가 비활성화됨 |
+| `503` | 토큰 인증이 켜져 있는데 관리자 키도 토큰도 없어서 업로드·교체·삭제 API가 비활성화됨 |
 
 ### 교체 — `PUT /api/docs/{name}`
 
@@ -214,7 +259,7 @@ FastAPI 기본 문서 경로 `/docs` 는 보고서 URL과 겹치므로 Swagger U
 
 ## AI 에이전트에서 사용하기
 
-`CLAUDE.md` (Claude Code) 또는 `AGENTS.md` (Codex)에 다음과 같이 적어두면 에이전트가 보고서를 만든 뒤 직접 업로드하고 링크를 알려줍니다. API 키는 문서에 직접 쓰지 말고 환경변수로 넘기세요.
+`CLAUDE.md` (Claude Code) 또는 `AGENTS.md` (Codex)에 다음과 같이 적어두면 에이전트가 보고서를 만든 뒤 직접 업로드하고 링크를 알려줍니다. 설정 페이지에서 에이전트별 토큰을 만들어 환경변수(`REPORT_API_KEY`)로 넘기세요. 토큰을 문서에 직접 쓰지 말고, 관리자 키는 에이전트에게 주지 않는 것을 권합니다.
 
 ````markdown
 ## HTML 보고서 공유
@@ -262,7 +307,7 @@ X-Content-Type-Options: nosniff
 - 유니코드는 NFC로 정규화합니다. macOS가 보내는 분해형(NFD) 한글 파일명도 브라우저 URL과 일치합니다.
 - 보고서 디렉터리 바로 아래의 일반 파일만 제공하며 심볼릭 링크는 따라가지 않습니다.
 
-**인증.** 업로드·교체·삭제는 `X-API-Key` 헤더가 `UPLOAD_API_KEY` 와 일치할 때만 허용되며, 상수 시간 비교(`secrets.compare_digest`)를 사용합니다. 키가 설정되지 않으면 이 API들은 `503` 으로 비활성화됩니다. 조회와 목록(`/index`, `GET /api/docs`)은 인증 없이 공개됩니다. 교체·삭제도 조회와 같은 이름 검증을 거치므로 보고서 디렉터리 밖의 파일이나 심볼릭 링크는 건드릴 수 없습니다.
+**인증.** 토큰 인증이 켜져 있으면 업로드·교체·삭제는 `X-API-Key` 헤더가 관리자 키(`UPLOAD_API_KEY`)나 만료되지 않은 토큰과 일치할 때만 허용됩니다. 모든 토큰과 상수 시간으로 비교합니다(`secrets.compare_digest`). 관리자 키도 토큰도 없으면 이 API들은 `503` 으로 비활성화됩니다. 토큰 인증을 끄면 인증 없이 허용됩니다. 조회와 목록(`/index`, `GET /api/docs`)은 항상 인증 없이 공개됩니다. 설정 페이지의 보호 방식은 [설정 페이지와 토큰](#설정-페이지와-토큰--settings) 절에 있습니다. 교체·삭제도 조회와 같은 이름 검증을 거치므로 보고서 디렉터리 밖의 파일이나 심볼릭 링크는 건드릴 수 없습니다.
 
 **URL 생성과 Host 헤더.** `PUBLIC_BASE_URL` 이 설정되어 있으면 항상 그 값을 사용합니다. 설정되지 않은 개발 환경에서는 Host 헤더가 `ALLOWED_HOSTS` 에 있을 때만 그대로 사용하고, 그 외에는 `http://localhost:{PORT}` 로 대체하고 경고 로그를 남깁니다. 위조된 Host 헤더가 응답 URL에 반영되지 않습니다.
 
@@ -280,19 +325,25 @@ html-report-server/
 │   ├── main.py              # 앱 팩토리(create_app), 라이프사이클, 미들웨어·라우터 등록
 │   ├── config.py            # 환경변수/.env 설정 (Settings)
 │   ├── schemas.py           # Pydantic DTO (UploadResponse, ErrorResponse)
-│   ├── dependencies.py      # 라우터 공용 의존성 (settings, storage)
+│   ├── dependencies.py      # 라우터 공용 의존성 (settings, storage, tokens)
 │   ├── middleware.py        # 요청 본문 크기 제한 ASGI 미들웨어
 │   ├── routers/
 │   │   ├── upload.py        # /api/docs: 목록(GET, 공개), 업로드·교체·삭제(POST·PUT·DELETE, 인증)
-│   │   └── documents.py     # GET /docs/{name}, GET /index, GET /
+│   │   ├── documents.py     # GET /docs/{name}, GET /index, GET /
+│   │   └── settings_page.py # /settings: 로그인, 토큰 인증 켜기/끄기, 토큰 추가·삭제 (세션·CSRF)
 │   ├── services/
-│   │   └── file_service.py  # 이름 검증, 원자적 저장·교체, 삭제, 디렉터리 스캔
+│   │   ├── file_service.py  # 이름 검증, 원자적 저장·교체, 삭제, 디렉터리 스캔
+│   │   └── token_service.py # tokens.csv·settings.json 읽기/쓰기, 무작위 토큰 생성, 만료일 계산
 │   ├── templates/
-│   │   └── index.html       # 목록 페이지 (Jinja2, 자동 이스케이프)
+│   │   ├── base.html        # 공통 레이아웃
+│   │   ├── index.html       # 목록 페이지 (Jinja2, 자동 이스케이프)
+│   │   ├── login.html       # 설정 페이지 로그인
+│   │   └── settings.html    # 설정 페이지
 │   └── static/
 │       └── style.css        # 반응형 스타일 (라이트/다크 모드)
 ├── data/
-│   └── reports/             # 보고서 저장 위치 (git 제외)
+│   ├── reports/             # 보고서 저장 위치 (git 제외)
+│   └── config/              # tokens.csv, settings.json (git 제외)
 ├── tests/                   # pytest
 ├── .env.example
 ├── requirements.txt         # 런타임 의존성
@@ -313,7 +364,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-테스트는 매번 임시 디렉터리를 보고서 저장소로 사용하므로 `./data/reports` 를 건드리지 않습니다. 검증 항목:
+테스트는 매번 임시 디렉터리를 보고서·설정 저장소로 사용하므로 `./data` 를 건드리지 않습니다. 검증 항목:
 
 - 정상 업로드와 `201` 응답, DTO 필드와 절대 URL, `+09:00` 시간대
 - 업로드 후 디스크에 원본 바이트 그대로 저장
@@ -331,11 +382,18 @@ pytest
 - 위조된 Host 헤더가 URL에 반영되지 않음
 - 앱을 새로 띄워도(재시작) 기존 보고서 조회·목록 표시, 시작 시 디렉터리 자동 생성
 - CSP sandbox 헤더 (`allow-scripts` 포함, `allow-same-origin` 미포함)
+- 설정 페이지: 로그인 필요·잘못된 키 거부·관리자 키 미설정 시 `503`, 세션 쿠키 속성(HttpOnly, SameSite=Strict, Path=/settings), 위조·만료 세션 거부, 로그아웃, 보안 헤더
+- CSRF: CSRF 토큰 누락, 다른 Origin, `Origin: null`(sandbox 보고서) 요청 거부, 로그인 없는 요청은 로그인으로 이동
+- 토큰 인증 켜기/끄기와 `settings.json` 저장, 꺼짐이면 토큰 없이 업로드·삭제, 손상된 설정 파일이면 켜짐 유지
+- 토큰 생성: 무작위 값(`hrs_`), 직접 지정 불가, CSV 열(`name,token,expires_at`), 만료 기간 7일·30일·1년·999년과 윤년 처리, 잘못된 이름·기간·중복 이름 거부, 이름 이스케이프, 파일 권한 600
+- 토큰 사용: 업로드·교체·삭제 허용, 관리자 키 병행, 알 수 없는/만료/삭제된 토큰 `401`, 손으로 편집한 CSV, 관리자 키 없이 토큰만으로 업로드
+- 재시작 후에도 토큰과 켜짐/꺼짐 유지
 
 ## 운영 참고
 
 - **교체·삭제**: `PUT`/`DELETE /api/docs/{name}` 을 쓰거나, `data/reports/` 의 파일을 직접 지우거나 바꿔도 목록에 바로 반영됩니다. 이름 변경 API는 없으므로 파일 이름을 직접 바꾸세요.
 - **직접 배치**: 이름 규칙에 맞는 `*.html` 파일을 디렉터리에 복사해도 목록과 조회에 나타납니다. 이때 업로드 날짜는 파일 mtime입니다.
-- **백업**: `data/reports/` 디렉터리만 복사하면 됩니다.
+- **백업**: `data/` 디렉터리를 복사하면 보고서(`data/reports`)와 토큰·설정(`data/config`)이 함께 백업됩니다. `tokens.csv` 에는 토큰 값이 그대로 들어 있으니 백업 파일도 안전하게 보관하세요.
+- **토큰이 유출되면**: 설정 페이지에서 그 토큰을 삭제하세요. 관리자 키가 유출되면 `.env` 의 `UPLOAD_API_KEY` 를 바꾸고 컨테이너를 다시 만드세요(모든 설정 페이지 세션도 끝납니다).
 - **리버스 프록시(HTTPS)**: `PUBLIC_BASE_URL=https://your.domain` 을 설정하세요. nginx 사용 시 `client_max_body_size` 를 `MAX_UPLOAD_SIZE_MB` 보다 크게 잡아야 합니다.
-- **로그**: 업로드 성공·거부(사유, 클라이언트 IP), 인증 실패, 저장 오류를 표준 출력으로 남깁니다. 시작할 때 API 키 미설정, 예시 키(`change-me`) 사용, 저장 디렉터리 쓰기 불가를 경고합니다.
+- **로그**: 업로드 성공·거부(사유, 클라이언트 IP), 인증 실패(만료된 토큰은 토큰 이름 포함), 설정 페이지 로그인 성공·실패, 토큰 인증 켜기/끄기, 토큰 생성·삭제(토큰 값은 남기지 않음), 저장 오류를 표준 출력으로 남깁니다. 시작할 때 관리자 키 미설정, 예시 키(`change-me`) 사용, 토큰 인증 꺼짐, 저장 디렉터리 쓰기 불가를 경고합니다.

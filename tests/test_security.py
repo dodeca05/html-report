@@ -65,7 +65,7 @@ def test_rejects_dangerous_filenames(client, upload, reports_dir, tmp_path, file
 
     assert response.status_code == 400
     assert stored_files(reports_dir) == []
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["reports"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["config", "reports"]
 
 
 @pytest.mark.parametrize(
@@ -78,7 +78,7 @@ def test_rejects_dangerous_name_field(client, upload, reports_dir, tmp_path, nam
 
     assert response.status_code == 400
     assert stored_files(reports_dir) == []
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["reports"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["config", "reports"]
 
 
 # --- Path traversal on read --------------------------------------------------

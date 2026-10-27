@@ -44,6 +44,8 @@ class Settings(BaseModel):
     port: int = Field(default=8000, ge=1, le=65535)
     public_base_url: str | None = None
     reports_dir: Path = Path("./data/reports")
+    # Settings page state: tokens.csv and settings.json.
+    config_dir: Path = Path("./data/config")
     max_upload_size_mb: float = Field(default=10, gt=0)
     upload_api_key: str | None = None
     tz: str = DEFAULT_TZ
@@ -75,9 +77,9 @@ class Settings(BaseModel):
             raise ValueError("PUBLIC_BASE_URL must be an absolute http:// or https:// URL, e.g. https://example.com")
         return value.rstrip("/")
 
-    @field_validator("reports_dir")
+    @field_validator("reports_dir", "config_dir")
     @classmethod
-    def _resolve_reports_dir(cls, value: Path) -> Path:
+    def _resolve_dir(cls, value: Path) -> Path:
         return value.expanduser().resolve()
 
     @field_validator("tz")

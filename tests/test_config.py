@@ -22,6 +22,7 @@ def test_defaults():
     assert settings.upload_api_key is None
     assert settings.max_upload_bytes == 10 * 1024 * 1024
     assert settings.reports_dir == Path("data/reports").resolve()
+    assert settings.config_dir == Path("data/config").resolve()
     assert settings.tz == "Asia/Seoul"
 
 
