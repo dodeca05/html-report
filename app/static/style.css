@@ -1,0 +1,181 @@
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --text: #1b1f24;
+  --muted: #5d6673;
+  --border: #e2e5ea;
+  --head: #f9fafb;
+  --row-hover: #f3f6fc;
+  --link: #2f5bd3;
+  --link-hover: #1f44a8;
+  --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --surface: #171a20;
+    --text: #e5e8ec;
+    --muted: #98a2b0;
+    --border: #2a2f38;
+    --head: #1c2027;
+    --row-hover: #1f242c;
+    --link: #8aa8ff;
+    --link-hover: #b3c6ff;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 48px 16px 64px;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-bottom: 20px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.count {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.reports {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.reports th,
+.reports td {
+  padding: 13px 20px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.reports thead th {
+  background: var(--head);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.reports tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.reports tbody tr:hover {
+  background: var(--row-hover);
+}
+
+.reports .name a {
+  color: var(--link);
+  font-weight: 500;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.reports .name a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+.reports .name a:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.reports .date {
+  width: 1%;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.empty {
+  margin: 0;
+  padding: 56px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* Phones: one stacked card row per report instead of two cramped columns. */
+@media (max-width: 560px) {
+  .page {
+    padding-top: 28px;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .reports thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .reports tr {
+    display: block;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .reports tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .reports td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+
+  .reports .date {
+    width: auto;
+    margin-top: 2px;
+    font-size: 0.8125rem;
+  }
+}

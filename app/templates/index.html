@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>HTML Reports</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5bd3'/%3E%3Cpath d='M10 8h8l5 5v11H10z' fill='%23fff'/%3E%3Cpath d='M13 17h7M13 20.5h7' stroke='%232f5bd3' stroke-width='1.6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <h1>HTML Reports</h1>
+      {% if reports %}<p class="count">보고서 {{ reports|length }}개</p>{% endif %}
+    </header>
+
+    <section class="card">
+      {% if reports %}
+      <table class="reports">
+        <thead>
+          <tr>
+            <th scope="col">파일 이름</th>
+            <th scope="col" class="date">업로드 날짜</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for report in reports %}
+          <tr>
+            <td class="name"><a href="{{ report.href }}">{{ report.name }}</a></td>
+            <td class="date"><time datetime="{{ report.uploaded_at_iso }}">{{ report.uploaded_at }}</time></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">업로드된 보고서가 없습니다</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>
