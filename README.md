@@ -317,6 +317,48 @@ X-Content-Type-Options: nosniff
 
 ## 프로젝트 구조
 
+### 아키텍처 구조도
+
+```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 260}}}%%
+flowchart TB
+    agent["AI 에이전트<br/>업로드 토큰 (Bearer)"]
+    user["사용자 (브라우저)"]
+
+    subgraph app["FastAPI 앱 · app/"]
+        mw["middleware.py<br/>BodySizeLimitMiddleware (본문 크기 제한)"]
+        subgraph routers["routers/ · HTTP 처리"]
+            up["upload.py<br/>/api/docs: 목록 · 업로드 · 교체 · 삭제"]
+            doc["documents.py<br/>/docs/{name} · /index · /"]
+            setp["settings_page.py<br/>/settings: 로그인 · 토큰 관리 (세션 · CSRF)"]
+        end
+        subgraph services["services/ · 파일시스템 로직 (HTTP를 모름)"]
+            fs["file_service.py · ReportStorage<br/>이름 검증 · 원자적 저장/교체 · 삭제 · 디렉터리 스캔"]
+            ts["token_service.py · TokenStore<br/>토큰 생성 · 만료 · 토큰 인증 켜기/끄기"]
+        end
+        tpl["templates/ · static/<br/>목록 · 로그인 · 설정 화면"]
+    end
+
+    reports[("data/reports/<br/>*.html")]
+    config[("data/config/<br/>tokens.csv · settings.json")]
+
+    agent --> mw
+    user --> mw
+    mw --> routers
+    up --> fs
+    up -->|"토큰 검증"| ts
+    doc --> fs
+    doc --> tpl
+    setp --> ts
+    setp --> tpl
+    fs --> reports
+    ts --> config
+```
+
+화살표는 호출 방향입니다. 라우터는 `dependencies.py`로 주입받은 `ReportStorage`·`TokenStore`만 호출하고, 파일시스템 접근은 서비스 계층에만 있습니다.
+
+### 디렉터리 구조
+
 ```text
 html-report-server/
 ├── app/
